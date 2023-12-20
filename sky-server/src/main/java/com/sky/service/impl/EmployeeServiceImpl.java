@@ -1,23 +1,34 @@
 package com.sky.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+//import com.github.pagehelper.IPage;
+//import com.github.pagehelper.Page;
+//import com.github.pagehelper.PageHelper;
+import com.baomidou.mybatisplus.core.toolkit.StringUtils;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sky.constant.MessageConstant;
 import com.sky.constant.PasswordConstant;
 import com.sky.constant.StatusConstant;
 import com.sky.context.BaseContext;
 import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
+import com.sky.dto.EmployeePageQueryDTO;
 import com.sky.entity.Employee;
 import com.sky.exception.AccountLockedException;
 import com.sky.exception.AccountNotFoundException;
 import com.sky.exception.PasswordErrorException;
 import com.sky.mapper.EmployeeMapper;
+import com.sky.result.PageResult;
 import com.sky.service.EmployeeService;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class EmployeeServiceImpl implements EmployeeService {
@@ -36,7 +47,13 @@ public class EmployeeServiceImpl implements EmployeeService {
         String password = employeeLoginDTO.getPassword();
 
         //1、根据用户名查询数据库中的数据
-        Employee employee = employeeMapper.getByUsername(username);
+        //Employee employee = employeeMapper.getByUsername(username);
+        //Mybatis plus
+        QueryWrapper<Employee> qw = new QueryWrapper<Employee>();
+        qw.eq("username",username);
+        Employee employee = employeeMapper.selectOne(qw);
+
+
 
         //2、处理各种异常情况（用户名不存在、密码不对、账号被锁定）
         if (employee == null) {
@@ -73,7 +90,27 @@ public class EmployeeServiceImpl implements EmployeeService {
         employee.setCreateUser(BaseContext.getCurrentId());
         employee.setUpdateUser(BaseContext.getCurrentId());
 
-        employeeMapper.add(employee);
+        employeeMapper.insert(employee);
+        //employeeMapper.add(employee);
+
+    }
+
+    @Override
+    public PageResult pageQuery(EmployeePageQueryDTO employeePageQueryDTO) {
+//        PageHelper.startPage(employeePageQueryDTO.getPage(),employeePageQueryDTO.getPageSize());
+//        Page<Employee> page = employeeMapper.pageQuery(employeePageQueryDTO);
+//        long total = page.getTotal();
+//        List<Employee> records = page.getResult();
+
+        QueryWrapper<Employee> qw = new QueryWrapper<Employee>();
+        qw.like(StringUtils.isNotBlank(employeePageQueryDTO.getName()),"username",employeePageQueryDTO.getName());
+        IPage page1 = new Page(employeePageQueryDTO.getPage(),employeePageQueryDTO.getPageSize());
+        IPage iPage = employeeMapper.selectPage(page1, qw);
+        long total = iPage.getTotal();
+        List<Employee> records = iPage.getRecords();
+
+
+        return new PageResult(total,records);
     }
 
 }
