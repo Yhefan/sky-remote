@@ -1,12 +1,11 @@
 package com.sky.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
-//import com.github.pagehelper.IPage;
-//import com.github.pagehelper.Page;
-//import com.github.pagehelper.PageHelper;
 import com.baomidou.mybatisplus.core.toolkit.StringUtils;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.sky.annotation.AutoFill;
 import com.sky.constant.MessageConstant;
 import com.sky.constant.PasswordConstant;
 import com.sky.constant.StatusConstant;
@@ -15,6 +14,7 @@ import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
 import com.sky.dto.EmployeePageQueryDTO;
 import com.sky.entity.Employee;
+import com.sky.enumeration.OperationType;
 import com.sky.exception.AccountLockedException;
 import com.sky.exception.AccountNotFoundException;
 import com.sky.exception.PasswordErrorException;
@@ -77,18 +77,15 @@ public class EmployeeServiceImpl implements EmployeeService {
         //3、返回实体对象
         return employee;
     }
-
-
-   public void add(EmployeeDTO employeeDTO) {
-        Employee employee = new Employee();
-        BeanUtils.copyProperties(employeeDTO,employee);
+    @AutoFill(value = OperationType.INSERT)
+   public void add(Employee employee) {
         employee.setStatus(StatusConstant.ENABLE);
         employee.setPassword(PasswordConstant.DEFAULT_PASSWORD);
-        employee.setCreateTime(LocalDateTime.now());
-        employee.setUpdateTime(LocalDateTime.now());
-
-        employee.setCreateUser(BaseContext.getCurrentId());
-        employee.setUpdateUser(BaseContext.getCurrentId());
+//        employee.setCreateTime(LocalDateTime.now());
+//        employee.setUpdateTime(LocalDateTime.now());
+//
+//        employee.setCreateUser(BaseContext.getCurrentId());
+//        employee.setUpdateUser(BaseContext.getCurrentId());
 
         employeeMapper.insert(employee);
         //employeeMapper.add(employee);
@@ -111,6 +108,32 @@ public class EmployeeServiceImpl implements EmployeeService {
 
 
         return new PageResult(total,records);
+    }
+
+    @Override
+    public void startOrStop(Integer status, Long id) {
+        Employee employee = new Employee();
+        employee.setId(id);
+        employee.setStatus(status);
+
+        employeeMapper.updateById(employee);
+    }
+
+    @Override
+    public Employee findById(Long id) {
+        Employee employee = employeeMapper.selectById(id);
+        if (employee!=null)
+          employee.setPassword("****");
+        return employee;
+    }
+
+    @AutoFill(value = OperationType.UPDATE)
+    @Override
+    public void update(Employee employee) {
+      //  employee.setId(employee.getId());
+//        employee.setUpdateTime(LocalDateTime.now());
+//        employee.setUpdateUser(BaseContext.getCurrentId());
+        employeeMapper.updateById(employee);
     }
 
 }

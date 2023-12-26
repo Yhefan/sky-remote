@@ -1,5 +1,6 @@
 package com.sky.controller.admin;
 
+import com.baomidou.mybatisplus.extension.api.R;
 import com.sky.constant.JwtClaimsConstant;
 import com.sky.dto.EmployeeDTO;
 import com.sky.dto.EmployeeLoginDTO;
@@ -77,9 +78,9 @@ public class EmployeeController {
 
     @PostMapping
     @ApiOperation("新增员工")
-    public Result add(@RequestBody EmployeeDTO employeeDTO){
-        log.info("新增员工：{}",employeeDTO);
-        employeeService.add(employeeDTO);
+    public Result add(@RequestBody Employee employee){
+        log.info("新增员工：{}",employee);
+        employeeService.add(employee);
         return Result.success();
     }
 
@@ -90,5 +91,26 @@ public class EmployeeController {
         return Result.success(pageResult);
     }
 
+    @PostMapping("/status/{status}")
+    @ApiOperation("启用禁用员工账号")
+    public Result startOrStop(@PathVariable Integer status, Long id){
+        log.info("启用禁用员工账号：{}，{}",status,id);
+        employeeService.startOrStop(status,id);
+        return Result.success();
+    }
+
+    @GetMapping ("/{id}")
+    @ApiOperation("根据id查")
+    public Result<Employee> findById(@PathVariable Long id){
+        Employee employee = employeeService.findById(id);
+        return Result.success(employee);
+    }
+
+    @PutMapping
+    @ApiOperation("编辑员工信息")
+    public Result update(@RequestBody Employee employee){
+        employeeService.update(employee);
+        return Result.success();
+    }
 
 }
