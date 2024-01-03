@@ -47,6 +47,7 @@ public class CategoryController {
     @PutMapping
     @ApiOperation(value = "修改分类")
     public Result update(@RequestBody Category category){
+        log.info("category:{}",category);
         categoryService.update(category);
         return Result.success();
     }

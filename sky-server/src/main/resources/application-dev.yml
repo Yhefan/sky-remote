@@ -11,3 +11,13 @@ sky:
     access-key-id: LTAI5t7oBmabpDba3n3CMvMU
     access-key-secret: p3PezOklaZapuL7v1PiWRwl1A6DmG3
     bucket-name: sky-project-yhf
+
+  redis:
+    host: localhost
+    port: 6379
+    password: yhf20001116
+    database: 10
+
+  wechat:
+    appid: wxad388af06e266467
+    secret: 8cadab5a1e077b953272df7afdb392f4
