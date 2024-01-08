@@ -95,9 +95,11 @@ public class CategoryServiceImpl implements CategoryService {
     }
 
     @Override
-    public List<Category> list() {
+    public List<Category> list(Integer type) {
         QueryWrapper<Category> qw = new QueryWrapper<>();
-        qw.eq("status",1);
+        if (type == null){
+            qw.eq("status",1);
+        }else {qw.eq("status",1).eq("type",type);}
         List<Category> categories = categoryMapper.selectList(qw);
         return categories;
     }

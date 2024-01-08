@@ -60,8 +60,8 @@ public class CategoryController {
 
     @GetMapping("/list")
     @ApiOperation(value = "查询所有分类")
-    public Result<List<Category>> list(){
-        List<Category> list = categoryService.list();
+    public Result<List<Category>> list(Integer type){
+        List<Category> list = categoryService.list(type);
         return Result.success(list);
     }
 

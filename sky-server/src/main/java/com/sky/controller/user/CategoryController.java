@@ -26,8 +26,8 @@ public class CategoryController {
      */
     @GetMapping("/list")
     @ApiOperation("查询分类")
-    public Result<List<Category>> list() {
-        List<Category> list = categoryService.list();
+    public Result<List<Category>> list(Integer typeId) {
+        List<Category> list = categoryService.list(typeId);
         return Result.success(list);
     }
 }

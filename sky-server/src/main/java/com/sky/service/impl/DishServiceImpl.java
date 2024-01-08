@@ -130,6 +130,17 @@ public class DishServiceImpl implements DishService{
         return dishVOList;
     }
 
+    /**
+     * 根据分类id查询菜品
+     * @param categoryId
+     * @return
+     */
+    public List<Dish> getByCategoryId(Long categoryId) {
+        QueryWrapper<Dish> qW = new QueryWrapper<>();
+        qW.eq("category_id",categoryId);
+        List<Dish> dishList = dishMapper.selectList(qW);
+        return dishList;
+    }
 
 
 }
