@@ -1,13 +1,13 @@
 package com.sky.service.impl;
 
+import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.sky.constant.MessageConstant;
 import com.sky.context.BaseContext;
-import com.sky.dto.OrdersPaymentDTO;
-import com.sky.dto.OrdersSubmitDTO;
+import com.sky.dto.*;
 import com.sky.entity.*;
 import com.sky.exception.AddressBookBusinessException;
 import com.sky.exception.OrderBusinessException;
@@ -17,8 +17,10 @@ import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.utils.WeChatPayUtil;
 import com.sky.vo.OrderPaymentVO;
+import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
 import com.sky.vo.OrderVO;
+import com.sky.websocket.WebSocketServer;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -26,7 +28,10 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class OrderServiceImpl implements OrderService {
@@ -42,6 +47,8 @@ public class OrderServiceImpl implements OrderService {
     private UserMapper userMapper;
     @Autowired
     private WeChatPayUtil weChatPayUtil;
+    @Autowired
+    private WebSocketServer webSocketServer;
     /**
      * 提交订单
      * @param ordersSubmitDTO
@@ -70,6 +77,7 @@ public class OrderServiceImpl implements OrderService {
         orders.setPhone(book.getPhone());
         orders.setConsignee(book.getConsignee());
         orders.setUserId(BaseContext.getCurrentId());
+        orders.setAddress(book.getProvinceName()+book.getCityName()+book.getDistrictName()+book.getDetail());
         orderMapper.insert(orders);
         //2.向订单详情表中插入n条数据
         for (ShoppingCart shoppingCart : list) {
@@ -133,6 +141,12 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         orderMapper.updateById(orders);
+        //通过websocket向客户端发送消息
+        Map map = new HashMap();
+        map.put("type", 1);//1表示来单提醒 2表客户催单
+        map.put("orderId", ordersDB.getId());
+        map.put("content","订单号：" + ordersPaymentDTO.getOrderNumber() + "，客户已支付，请尽快处理");
+        webSocketServer.sendToAllClient(JSON.toJSONString(map));
 
         return vo;
     }
@@ -156,6 +170,12 @@ public class OrderServiceImpl implements OrderService {
                 .build();
 
         orderMapper.updateById(orders);
+        //通过websocket向客户端发送消息
+        Map map = new HashMap();
+        map.put("type", 1);//1表示来单提醒 2表客户催单
+        map.put("orderId", ordersDB.getId());
+        map.put("content","订单号：" + outTradeNo + "，客户已支付，请尽快处理");
+        webSocketServer.sendToAllClient(JSON.toJSONString(map));
     }
     /**
      * 查询订单详情
@@ -212,6 +232,140 @@ public class OrderServiceImpl implements OrderService {
             });
         }
         return new PageResult(iPage1.getTotal(), list);
+    }
+
+    @Override
+    public void reminder(Long id) {
+        //通过websocket向客户端发送消息
+        Map map = new HashMap();
+        map.put("type", 2);//1表示来单提醒 2表客户催单
+        map.put("orderId", id);
+        map.put("content","订单号：" + id + "，客户催单，请尽快处理");
+        webSocketServer.sendToAllClient(JSON.toJSONString(map));
+    }
+
+    /**
+     * 订单分页查询
+     */
+    @Override
+    public PageResult conditionSearch(OrdersPageQueryDTO ordersPageQueryDTO) {
+        IPage page = new Page(ordersPageQueryDTO.getPage(), ordersPageQueryDTO.getPageSize());
+        IPage iPage1 = orderMapper.selectPage(page, new QueryWrapper<Orders>()
+                .eq(ordersPageQueryDTO.getNumber() != null, "number", ordersPageQueryDTO.getNumber())
+                .eq(ordersPageQueryDTO.getPhone() != null, "phone", ordersPageQueryDTO.getPhone())
+                .eq(ordersPageQueryDTO.getStatus() != null, "status", ordersPageQueryDTO.getStatus())
+                .eq(ordersPageQueryDTO.getUserId() != null, "user_id", ordersPageQueryDTO.getUserId())
+                .between(ordersPageQueryDTO.getBeginTime() != null && ordersPageQueryDTO.getEndTime() != null, "order_time", ordersPageQueryDTO.getBeginTime(), ordersPageQueryDTO.getEndTime())
+        );
+        List<OrderVO> list = new ArrayList();
+        // 查询出订单明细，并封装入OrderVO进行响应
+        if (iPage1 != null && iPage1.getTotal() > 0) {
+            //对iPage1进行遍历
+            iPage1.getRecords().forEach(orders -> {
+                //把orders强制转换为Orders类型
+                Orders order = (Orders) orders;
+                OrderVO orderVO = new OrderVO();
+                BeanUtils.copyProperties(orders, orderVO);
+                String orderDetails = getDetailsStr(order);
+                orderVO.setOrderDishes(orderDetails);
+                list.add(orderVO);
+            });
+        }
+        List<Orders> records = iPage1.getRecords();
+        return new PageResult(iPage1.getTotal(), list);
+    }
+
+    /**
+     * 把OrderDetail中的菜品名称拼接成字符串
+     * @param order
+     * @return
+     */
+    private String getDetailsStr(Orders order) {
+        List<OrderDetail> orderDetails = orderDetailMapper.selectList(new QueryWrapper<OrderDetail>().eq("order_id", order.getId()));
+        //把OrderDetail中的菜品名称拼接成字符串
+        List<String> stringList = orderDetails.stream().map(x -> {
+            String orderDishes = x.getName() + "*" + x.getNumber() + "份";
+            return orderDishes;
+        }).collect(Collectors.toList());
+        return String.join("",stringList);
+    }
+
+    /**
+     * 各个状态的订单数量统计
+     */
+    @Override
+    public OrderStatisticsVO statistics() {
+        OrderStatisticsVO orderStatisticsVO = new OrderStatisticsVO();
+        //查询待接单的订单数量
+        Integer toBeConfirmed = orderMapper.selectCount(new QueryWrapper<Orders>().eq("status", Orders.TO_BE_CONFIRMED));
+        //查询待派送的订单数量
+        Integer confirmed = orderMapper.selectCount(new QueryWrapper<Orders>().eq("status", Orders.CONFIRMED));
+        //查询派送中的订单数量
+        Integer deliveryInProgress = orderMapper.selectCount(new QueryWrapper<Orders>().eq("status", Orders.DELIVERY_IN_PROGRESS));
+        orderStatisticsVO.setToBeConfirmed(toBeConfirmed);
+        orderStatisticsVO.setConfirmed(confirmed);
+        orderStatisticsVO.setDeliveryInProgress(deliveryInProgress);
+        return orderStatisticsVO;
+    }
+
+    @Override
+    public void confirm(OrdersConfirmDTO ordersConfirmDTO) {
+        Orders orders = Orders.builder()
+                .id(ordersConfirmDTO.getId())
+                .status(Orders.CONFIRMED)
+                .build();
+        orderMapper.updateById(orders);
+
+    }
+
+    @Override
+    public void rejection(OrdersRejectionDTO ordersRejectionDTO) {
+        Orders orders = Orders.builder()
+                .id(ordersRejectionDTO.getId())
+                .status(Orders.CANCELLED)
+                .cancelReason(ordersRejectionDTO.getRejectionReason())
+                .cancelTime(LocalDateTime.now())
+                .build();
+        orderMapper.updateById(orders);
+    }
+
+    @Override
+    public void delivery(Long id) {
+        Orders orders = Orders.builder()
+                .id(id)
+                .status(Orders.DELIVERY_IN_PROGRESS)
+                .build();
+        orderMapper.updateById(orders);
+    }
+
+    @Override
+    public void complete(Long id) {
+        Orders orders = Orders.builder()
+                .id(id)
+                .status(Orders.COMPLETED)
+                .build();
+        orderMapper.updateById(orders);
+    }
+
+    @Override
+    public void adminCancel(OrdersCancelDTO ordersCancelDTO) {
+        Orders orders = Orders.builder()
+                .id(ordersCancelDTO.getId())
+                .status(Orders.CANCELLED)
+                .cancelReason(ordersCancelDTO.getCancelReason())
+                .cancelTime(LocalDateTime.now())
+                .build();
+        orderMapper.updateById(orders);
+    }
+
+    @Override
+    public OrderVO details(Long id) {
+        Orders orders = orderMapper.selectById(id);
+        OrderVO orderVO = new OrderVO();
+        BeanUtils.copyProperties(orders, orderVO);
+        List<OrderDetail> list = orderDetailMapper.selectList(new QueryWrapper<OrderDetail>().eq("order_id", id));
+        orderVO.setOrderDetailList(list);
+        return orderVO;
     }
 
 
